@@ -8,7 +8,8 @@ import joblib
 app = FastAPI()
 
 # Load the trained model and scaler
-model = joblib.load("xgboost_model.pkl")
+model = joblib.load("xgboost_model.pkl") # Trained XGBoost model
+scaler = joblib.load("scaler.pkl")
 
 # Define the input data format
 class TimeSeriesData(BaseModel):
