@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.INFO)
 ### Create FastAPI instance with custom docs and openapi url
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
 # http://127.0.0.1:8000/api/py/docs
+# http://localhost:8000/api/py/docs
 
 
 from fastapi.middleware.cors import CORSMiddleware

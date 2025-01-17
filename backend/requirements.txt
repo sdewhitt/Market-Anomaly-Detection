@@ -1,1 +1,10 @@
-xgboost, scikit-learn
+xgboost
+scikit-learn
+fastapi
+pydantic
+pandas
+numpy
+joblib
+io
+yfinance
+aiofiles 
