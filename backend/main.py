@@ -5,8 +5,12 @@ import numpy as np
 import joblib
 import io
 import yfinance as yf
-import datetime
+from datetime import datetime
 import aiofiles
+from sklearn.preprocessing import StandardScaler
+
+import logging
+logging.basicConfig(level=logging.INFO)
 
 ### Create FastAPI instance with custom docs and openapi url
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
@@ -32,14 +36,24 @@ async def predict():
             input_data = pd.read_csv(io.StringIO(content))
             input_data.rename(columns={'Data': 'Date'}, inplace=True)
 
+        #logging.info(f"\nInput Data:\n{input_data.head()}")
+
         data = format_data(input_data)
+        logging.info(f"\nFormatted Data:\n{data.head()}")
 
         # Scale the input data
-        scaled_data = scaler.transform(input_data)
+        #logging.info('\nScaling Data\n')
+        #scaled_data = scaler.transform(input_data)
+        #logging.info(f"\nScaled Data:\n{scaled_data}")
+
+        std_scaler = StandardScaler()
+        X = data.iloc[:, 2:]
+        scaled_data = std_scaler.fit_transform(X)
+
         
         # Predict anomaly
-        anomaly_score = model.predict_proba(scaled_data)[:, 1][0]  # Probability of being an anomaly
-        anomaly_label = model.predict(scaled_data)[0]  # Predicted label (0 or 1)
+        anomaly_score = model.predict_proba(scaled_data)[:, 1]  # Probability of being an anomaly
+        anomaly_label = model.predict(scaled_data)  # Predicted label (0 or 1)
         
         # Return results
         return {
@@ -54,31 +68,42 @@ def format_data(data: pd.DataFrame = None) -> pd.DataFrame:
     features = [
         'VIX', 
         'DXY',
-        #'BDIY', 
-       # 'LUMSTRUU', 
+        'BDIY', 
+        'LUMSTRUU', 
         'USGG30YR', 
         'GT10', 
-        #'GTDEM10Y', 
-        #'GTITL10YR', 
-        #'GTJPY10YR'
+        'GTDEM10Y', 
+        'GTITL10YR', 
+        'GTJPY10YR'
     ]
 
 
-    if data != None:
-        focused_features = data[['Y', 'Date'] + features]
+    logging.info(f'\nFetching data')
+    if data is not None:
+        focused_features = data[['Date', 'Y'] + features]
     else:
         focused_features = fetch_data()
 
+    #logging.info(f'\nData Fetched:\n{focused_features.head()}')
+
     window_count = 4 # each window is about a month long. TODO: try different window sizes
     for f in features: # moving averages
-        focused_features.loc[:, f'{f}_MA'] = focused_features[f].rolling(window=window_count).mean()
+        #logging.info(f'\nCalculating Moving Averages for: {f}\n')
+        focused_features = focused_features.assign(**{f'{f}_MA': focused_features[f].rolling(window=window_count).mean()})
 
-    # patch up NaN values with smaller temp windows until the intended window size is met
-    for i in range(window_count - 1):
-        focused_features.loc[i, f'{f}_MA'] = focused_features.loc[i, f]
-        focused_features.loc[i, f'{f}_MA'] = focused_features.loc[:i, f'{f}_MA'].mean()
+        # Calculate the moving average
+        rolling_mean = focused_features[f].rolling(window=window_count).mean()
+
+        # Fill NaN values with the original values in the initial window
+        rolling_mean_filled = rolling_mean.fillna(focused_features[f])
+        
+        # Assign the filled rolling mean to the new column
+        focused_features = focused_features.assign(**{f'{f}_MA': rolling_mean_filled})
 
     return focused_features
+
+
+
 
 def fetch_data() -> pd.DataFrame:
     yfinance_tickers = {
@@ -91,8 +116,10 @@ def fetch_data() -> pd.DataFrame:
     start_date = "2000-01-01"
     end_date = datetime.now().strftime("%Y-%m-%d")
 
+    logging.info('\npenis\n')
     all_data = pd.DataFrame()
 
+    
     # Fetch data from Yahoo Finance
     for label, ticker in yfinance_tickers.items():
         if ticker:
@@ -109,6 +136,7 @@ def fetch_data() -> pd.DataFrame:
     # Resample to weekly frequency and aggregate using mean
     all_data_weekly = all_data.resample('W').mean()
 
+    all_data_weekly.insert(0, 'Y', np.nan)
     # Save the weekly data to CSV
     #all_data_weekly.to_csv("yfinance_time_series_weekly.csv")
 
