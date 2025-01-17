@@ -16,21 +16,36 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
 # http://127.0.0.1:8000/api/py/docs
 
+
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with Vercel link
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+
 @app.get("/api/helloFastApi")
 def hello_fast_api():
     return {"message": "Hello from FastAPI"}
 
 
-# Load the trained model and scaler
-model = joblib.load("xgboost_model.pkl") # Trained XGBoost model
-scaler = joblib.load("scaler.pkl")
+# Load the models
+models = {
+    "base": joblib.load("xgboost.pkl"),
+    "large": joblib.load("large_xgboost.pkl"),
+    "medium": joblib.load("lumstruu_xgboost.pkl")
+}
+
+#scaler = joblib.load("scaler.pkl")
 
 
 @app.post("/api/predict")
-async def predict():
+async def predict(mode: str = 'base'):
     try:
-        # Convert input data to a DataFrame
-        #input_data = pd.DataFrame([data.week_data])
         async with aiofiles.open('EWS.csv', mode='r') as file:
             content = await file.read()
             input_data = pd.read_csv(io.StringIO(content))
@@ -50,7 +65,8 @@ async def predict():
         X = data.iloc[:, 2:]
         scaled_data = std_scaler.fit_transform(X)
 
-        
+
+        model = models[mode]        
         # Predict anomaly
         anomaly_score = model.predict_proba(scaled_data)[:, 1]  # Probability of being an anomaly
         anomaly_label = model.predict(scaled_data)  # Predicted label (0 or 1)
@@ -68,13 +84,13 @@ def format_data(data: pd.DataFrame = None) -> pd.DataFrame:
     features = [
         'VIX', 
         'DXY',
-        'BDIY', 
-        'LUMSTRUU', 
+        #'BDIY', 
+        #'LUMSTRUU', 
         'USGG30YR', 
         'GT10', 
-        'GTDEM10Y', 
-        'GTITL10YR', 
-        'GTJPY10YR'
+        #'GTDEM10Y', 
+        #'GTITL10YR', 
+        #'GTJPY10YR'
     ]
 
 
@@ -86,7 +102,7 @@ def format_data(data: pd.DataFrame = None) -> pd.DataFrame:
 
     #logging.info(f'\nData Fetched:\n{focused_features.head()}')
 
-    window_count = 4 # each window is about a month long. TODO: try different window sizes
+    window_count = 4 # each window is about a month long. Could try different window sizes
     for f in features: # moving averages
         #logging.info(f'\nCalculating Moving Averages for: {f}\n')
         focused_features = focused_features.assign(**{f'{f}_MA': focused_features[f].rolling(window=window_count).mean()})
